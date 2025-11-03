@@ -72,9 +72,12 @@ end
 @libh3 gridPathCellsSize(start::H3Index, _end::H3Index, size::Ptr{Int64})::H3Error
 @libh3 cellToChildren(cell::H3Index, childRes::Cint, children::Ptr{H3Index})::H3Error
 @libh3 cellToChildrenSize(cell::H3Index, childRes::Cint, out::Ptr{Int64})::H3Error
-
 @libh3 polygonToCellsExperimental(geoPolygon::Ptr{GeoPolygon}, res::Cint, flags::UInt32, size::Int64, out::Ptr{H3Index})::H3Error
 @libh3 maxPolygonToCellsSizeExperimental(geoPolygon::Ptr{GeoPolygon}, res::Cint, flags::UInt32, out::Ptr{Int64})::H3Error
-
+@libh3 cellAreaM2(cell::H3Index, out::Ptr{Cdouble})::H3Error
+@libh3 getPentagons(res::Cint, out::Ptr{H3Index})::H3Error
+@libh3 compactCells(cellSet::Ptr{H3Index}, compactedSet::Ptr{H3Index}, numCells::Int64)::H3Error
+@libh3 uncompactCells(compactedSet::Ptr{H3Index}, numCells::Int64, cellSet::Ptr{H3Index}, maxCells::Int64, res::Cint)::H3Error
+@libh3 uncompactCellsSize(compactedSet::Ptr{H3Index}, numCompacted::Int64, res::Cint, out::Ptr{Int64})::H3Error
 
 end  # module LibH3

@@ -1,0 +1,49 @@
+# Coordinates
+
+GlobalGrids.jl provides small coordinate wrapper types that preserve projection info and interoperate via Proj.jl. All coordinate types implement GeoInterface's point trait, so they work with plotting and spatial libraries.
+
+## Types
+
+- `LonLat(x, y)` — longitude and latitude in degrees (EPSG:4326)
+- `LonLatAuthalic(x, y)` — lon/lat in degrees using the authalic radius
+- `ISEA(x, y)` — ISEA projection coordinates on the plane
+- `ISEACube(x, y)` — rotated/skewed ISEA plane coordinates.
+- `ECEF(x, y, z)` — Earth‑Centered, Earth‑Fixed Cartesian meters (WGS84)
+
+Each type can be constructed from another to transform coordinates:
+
+```julia
+using GlobalGrids
+p = LonLat(-75.0, 54.0)
+ISEA(p)                 # -> ISEA
+ISEACube(p)             # -> ISEACube (via ISEA)
+ECEF(p)                 # -> ECEF meters
+LonLat(ECEF(p))         # round‑trip back to lon/lat
+```
+
+## Distance and bearings
+
+- `haversine(a, b)` — great‑circle distance in meters using the Haversine formula (operates on any coordinate types).
+- `azimuth(a, b)` — initial bearing from `a` to `b`, degrees clockwise from North.
+- `destination(x, azimuth°, dist_m)` — destination point from `x` at azimuth and distance.
+
+```julia
+using GlobalGrids
+p = LonLat(-75, 54)
+q = LonLat(-80, 50)
+GlobalGrids.haversine(p, q)          # ≈ distance in meters
+θ = GlobalGrids.azimuth(p, q)        # degrees
+r = GlobalGrids.destination(p, θ, 50_000)
+```
+
+## Extents
+
+`coords2extent(x; n=1000, s=1000, e=1000, w=1000)` builds an `Extents.Extent` around a point by offset distances in meters (or provide a single value to use for all directions):
+
+```julia
+using GlobalGrids, Extents
+p = LonLat(-75, 54)
+ex = GlobalGrids.coords2extent(p, 2000)  # 2 km in all directions
+# or directional:
+ex2 = GlobalGrids.coords2extent(p; n=5000, s=1000, e=2000, w=2000)
+```

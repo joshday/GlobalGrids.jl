@@ -5,6 +5,11 @@ Base.show(io::IO, ::H3Grid) = print(io, styled"{bright_cyan: ⣿⣿ H3Grid}")
 
 Base.getindex(g::H3Grid, i::Integer) = H3Cell(i, Int[])
 
+function pentagons(g::H3Grid, res::Integer)
+    out = Vector{UInt64}(undef, 12)
+    LibH3.getPentagons(Cint(res), pointer(out))
+    return H3Cell.(out)
+end
 
 #-----------------------------------------------------------------------------# H3Cell
 """
@@ -84,13 +89,14 @@ GI.geomtrait(::H3Cell) = GI.PolygonTrait()
 function GI.centroid(::GI.PolygonTrait, o::H3Cell)
     g = Ref{LibH3.LatLng}()
     LibH3.cellToLatLng(o.index, g)
-    return LonLatAuthalic(g[])
+    return LonLat(LonLatAuthalic(g[]))
 end
 
 function GI.coordinates(::GI.PolygonTrait, o::H3Cell)
     g = Ref{LibH3.CellBoundary}()
     LibH3.cellToBoundary(o.index, g)
-    return [LonLatAuthalic(x) for x in g[].verts[1:g[].numVerts]]
+    out = [LonLat(LonLatAuthalic(x)) for x in g[].verts[1:g[].numVerts]]
+    return vcat(out, out[1])  # close the polygon
 end
 
 GI.isgeometry(::H3Cell) = true
@@ -99,13 +105,13 @@ GI.ncoord(::GI.PolygonTrait, o::H3Cell) = 2
 GI.nhole(::GI.PolygonTrait, o::H3Cell) = 0
 GI.ngeom(::GI.PolygonTrait, o::H3Cell) = 1
 GI.getgeom(::GI.PolygonTrait, o::H3Cell, i::Integer) = GI.LineString(GI.coordinates(o))
-GI.area(::GI.PolygonTrait, o::H3Cell) = area(o)  # in m²
+GI.area(::GI.PolygonTrait, o::H3Cell) = (out = Ref{Cdouble}(); LibH3.cellAreaM2(o.index, out); out[])
 
 #-----------------------------------------------------------------------------# H3Cell inspection
 is_pentagon(o::H3Cell) = LibH3.isPentagon(o.index) == 1
 
 # resolution(o::H3Cell) = Int(LibH3.getResolution(o.index))
-@inline resolution(o::H3Cell)= Int((o.index >> H3_RES_OFFSET) & 0xF)  # Faster than using ccall
+@inline resolution(o::H3Cell) = Int((o.index >> H3_RES_OFFSET) & 0xF)  # Faster than using ccall
 
 base_cell(o::H3Cell) = Int(LibH3.getBaseCellNumber(o.index))
 
@@ -186,38 +192,48 @@ function grid_path(a::H3Cell, b::H3Cell)
 end
 
 #-----------------------------------------------------------------------------# cells
-cells(geom, res::Integer = 10; kw...) = cells(GI.geomtrait(geom), geom, res; kw...)
+h3cells(geom, res::Integer = 10; kw...) = h3cells(GI.geomtrait(geom), geom, res; kw...)
 
-cells(::GI.PointTrait, geom, res::Integer) = [H3Cell(LonLat(GI.coordinates(geom)), res)]
+h3cells(::GI.PointTrait, geom, res::Integer) = [H3Cell(LonLat(GI.coordinates(geom)), res)]
 
-function cells(::GI.MultiPointTrait, geom, res::Integer)
+function h3cells(::GI.MultiPointTrait, geom, res::Integer)
     coords = LonLat.(GI.coordinates(geom))
     unique!(H3Cell.(coords, res))
 end
 
-function cells(::GI.LineTrait, geom, res::Integer; shortest_path = true)
+function h3cells(::GI.LineTrait, geom, res::Integer; shortest_path = true)
     coords = LonLat.(GI.coordinates(geom))
     a = H3Cell(coords[1], res)
     b = H3Cell(coords[2], res)
-    out = grid_path(a, b)  # grid_path_cells gives approximate line
-    # Now expand to include neighboring cells that the line crosses
-    if !shortest_path
-        for cell in out, candidate in cell
+    out = grid_path(a, b)
+    if shortest_path
+        return out
+    else
+        for cell in out, candidate in grid_ring(cell, 1)
             candidate in out && continue
             GO.disjoint(geom, candidate) && continue
             push!(out, candidate)
         end
-        unique!(out)
+        filter!(x -> !GO.disjoint(geom, x), out)
     end
-    out
+    # # Now expand to include neighboring cells that the line crosses
+    # if !shortest_path
+    #     for cell in out, candidate in cell
+    #         candidate in out && continue
+    #         GO.disjoint(geom, candidate) && continue
+    #         push!(out, candidate)
+    #     end
+    #     unique!(out)
+    # end
+    # out
 end
 
-function cells(::GI.LineStringTrait, geom, res::Integer; shortest_path=true)
+function h3cells(::GI.LineStringTrait, geom, res::Integer; shortest_path=true)
     coords = GI.coordinates(geom)
     out = H3Cell[]
     @views for (a,b) in zip(coords[1:end-1], coords[2:end])
         line = GI.Line([a, b])
-        union!(out, cells(line, res; shortest_path))
+        union!(out, h3cells(line, res; shortest_path))
     end
     return out
 end
@@ -240,9 +256,9 @@ function _h3polygon(geom)
     end
 end
 
-function cells(::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
+function h3cells(::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
     containment in (:center, :full, :overlap, :overlap_bbox) ||
-        throw(ArgumentError("Invalid containment mode.  Expected one of `(nothing, :center, :full, :overlap, :overlap_bbox)`.  Found: $containment."))
+        throw(ArgumentError("Invalid containment mode.  Expected one of `(:center, :full, :overlap, :overlap_bbox)`.  Found: $containment."))
     geo_polygon = _h3polygon(geom)
     flag_dict = Dict{Symbol, UInt32}(:center => 0, :full => 1, :overlap => 2, :overlap_bbox => 3)
     flag = flag_dict[containment]
@@ -255,11 +271,11 @@ function cells(::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
     end
 end
 
-function cells(::GI.MultiPolygonTrait, geom, res::Integer; kw...)
-    reduce(union, cells.(GI.getpolygon(geom), res; kw...))
+function h3cells(::GI.MultiPolygonTrait, geom, res::Integer; kw...)
+    reduce(union, h3cells.(GI.getpolygon(geom), res; kw...))
 end
 
-function cells((; X, Y)::Extents.Extent, res::Integer; kw...)
+function h3cells((; X, Y)::Extents.Extent, res::Integer; kw...)
     ls = GI.LineString([(X[1], Y[1]), (X[1], Y[2]), (X[2], Y[2]), (X[2], Y[1]), (X[1], Y[1])])
-    cells(GI.Polygon([ls]), res; kw...)
+    h3cells(GI.Polygon([ls]), res; kw...)
 end

@@ -14,7 +14,8 @@ using LinearAlgebra
 using Rotations
 using H3_jll: libh3
 
-export icosahedron, LonLat, LonLatAuthalic, ISEA, ISEACube, ECEF
+export icosahedron, LonLat, LonLatAuthalic, ISEA, ISEACube, ECEF,
+    H3Grid, H3Cell, h3cells
 
 include("icosahedron.jl")
 include("coordinates.jl")

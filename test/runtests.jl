@@ -24,6 +24,9 @@ end # Coordinates
 @testset "H3" begin
     # Sanity checks:
     g = GG.H3Grid()
+    for res in 0:15
+        @test length(GG.pentagons(g, res)) == 12
+    end
     @test g isa GG.H3Grid
     ll = GG.LonLat(-75.0, 54.0)
 
@@ -36,6 +39,9 @@ end # Coordinates
 
     for res in 1:15
         o = GG.H3Cell(ll, res)
+        o2 = GG.H3Cell(GG.h3string(o))
+        @test GI.area(o) > 0
+        @test o == o2
         @test o isa GG.H3Cell
         @test GG.resolution(o) == res
         @test !GG.is_pentagon(o)

@@ -1,0 +1,38 @@
+# Icosahedron utilities
+
+The package includes helper utilities for working with an icosahedron and its dual, useful for designing and visualizing discrete global grids.
+
+## Building an icosahedron
+
+```julia
+using GlobalGrids, GeometryBasics
+
+# Place a vertex direction and azimuth, return a Mesh of triangles on the unit sphere
+ico = icosahedron(Point3f(0,0,1), 0.0)   # default orientation
+
+# Preset orientations aligned with DGG literature
+ico_poles     = icosahedron(:poles)
+ico_isea      = icosahedron(:isea)
+ico_dymaxion  = icosahedron(:dymaxion)
+```
+
+- Vertices are normalized to lie on the unit sphere.
+- The function returns a `GeometryBasics.Mesh` with `TriangleFace` connectivity.
+
+## Dual (pentagons)
+
+Create the dual mesh: vertices at face centroids of the icosahedron and pentagonal faces around original vertices.
+
+```julia
+using GeometryBasics
+ico = icosahedron(:isea)
+d = GlobalGrids.dual(ico)        # Mesh with NgonFace{5}
+```
+
+## Helpers
+
+- `rotation_matrix(axis::SVector{3}, angle)` — 3×3 Rodrigues rotation matrix
+- `counterclockwise!(points)` — enforce CCW ordering of polygon vertices in their local plane
+- `unit_icosahedron(T)` — base icosahedron mesh of type `T`
+
+These helpers are generally internal, but can be useful for custom grid experiments.

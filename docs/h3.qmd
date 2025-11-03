@@ -1,0 +1,254 @@
+# H3 Grid System
+
+```{julia}
+#| echo: false
+using GlobalGrids, GeoMakie, GLMakie
+
+grid = H3Grid()
+
+fig = Figure()
+ax = GeoAxis(fig[1,1], dest = "+proj=ortho +lon_0=-50 +lat_0=30")
+lines!(ax, [grid[i] for i in 1:121])
+poly!(ax, GlobalGrids.pentagons(grid, 0), color=(:black, .4))
+
+ep = surface!(ax,
+    -180..180, -90..90,
+    zeros(axes(rotr90(GeoMakie.earth())));
+    shading = NoShading, color = rotr90(GeoMakie.earth())
+)
+translate!(ep, 0, 0, -1)
+
+fig
+```
+
+H3 is a DGGS developed by Uber.  Here's a brief summary of the H3 grid system:
+
+- There are 16 resolutions (0-15 coarse-to-fine).
+- At each resolution, there are exactly 12 pentagon cells in the grid.  Every other cell is a hexagon.
+- Pentagon locations are determined such that their centers are not on land.
+
+
+## Creating an `H3Cell`
+
+- Every cell in the grid is indexed by a single `UInt64`.  An `H3Cell` is simply a wrapper around a `UInt64` index.
+- The index encodes the base cell (121 possible values, shown in the figure above), resolution, and *digits* (0-6).
+- Each hexagon gets split into 7 hexagons by the next highest resolution.  An additional digit corresponds to one of the smaller hexagons derived from its parent.
+
+### From `H3Grid`
+
+```{julia}
+grid = H3Grid()
+
+# Select one of the 121 base cells:
+grid[121]
+```
+
+```{julia}
+# Nesting getindex to dive down the hierarchy:
+grid[121][1][5][0]
+```
+
+### From Base Cell and Digits
+
+```{julia}
+H3Cell(121, [1, 5, 0])
+```
+
+### From Coordinates and Resolution:
+
+```{julia}
+coords = LonLat(-75.0, 54.0)
+
+H3Cell(coords, 10)
+```
+
+### From Hexadecimal String
+
+```{julia}
+c = H3Cell(ECEF(972438.8178049477, -3.62919107530028e6, 5.136743831429061e6))
+
+str = GlobalGrids.h3string(c)
+@info str
+
+H3Cell(str)
+```
+
+## Inspecting cells
+
+```{julia}
+GlobalGrids.resolution(c)
+```
+
+```{julia}
+GlobalGrids.base_cell(c)
+```
+
+```{julia}
+GlobalGrids.is_pentagon(c)
+```
+
+```{julia}
+GlobalGrids.digits(c)'
+```
+
+```{julia}
+# Faces of the icosahedron the cell intersects
+GlobalGrids.face_numbers(c)
+```
+
+
+## GeoInterface Integration:
+
+```{julia}
+import GeoInterface as GI
+
+GI.coordinates(c)
+```
+
+```{julia}
+GI.centroid(c)
+```
+
+```{julia}
+GI.area(c)  # meters ^ 2
+```
+
+## Grid Hierarchy
+
+- `parent`, `siblings`, `children`
+
+```{julia}
+fig = Figure()
+ax = Axis(fig[1,1], title="Cell:Black, Parent:Blue, Siblings:Orange, Children:Green")
+lines!(ax, GlobalGrids.parent(c), color = :blue)
+poly!(ax, c, color = :black)
+lines!(ax, GlobalGrids.siblings(c), color = :orange)
+lines!(ax, GlobalGrids.children(c), color = :green)
+fig
+```
+
+## Rings and Disks
+
+- `grid_ring(cell, i)` returns the cells that are exactly grid distance `i` away from the `cell`.
+- `grid_disk(cell, i)` is similar to `grid_ring`, but returns all cells inside the ring as well.
+
+```{julia}
+fig = Figure()
+ax = Axis(fig[1,1])
+colors = [:blue, :green, :red, :magenta]
+
+poly!(ax, c, color=:black)
+for i in 1:4
+    poly!(ax, GlobalGrids.grid_ring(c, i), color=colors[i])
+end
+
+
+fig
+```
+
+## "Rasterizing" Geometries to the H3 Grid
+
+### Point
+
+```{julia}
+ll = LonLat(-54.0, -12.0)
+
+fig = Figure()
+ax = Axis(fig[1,1], title="Resolutions 0-3")
+for res in 0:3
+    lines!(ax, h3cells(ll, res))
+end
+scatter!(ax, ll)
+
+fig
+```
+
+### MultiPoint
+
+```{julia}
+coords = [LonLat(360rand() - 180, 180rand() - 90) for _ in 1:100]
+
+x = H3Cell.(coords, 0)
+
+f, a, p = lines(x, axis=(;type=GeoAxis, dest = "+proj=ortho +lon_0=-50 +lat_0=30"))
+scatter!(a, coords)
+f
+```
+
+### Line
+
+- By default, the cells will be an arbitrary shortest path between the cells that contain the two points.
+- For more accuracy (cells with any intersection are included), but slower performance, use the `shortest_path=false` keyword argument.
+
+```{julia}
+line = GI.Line([LonLat(0, 0), LonLat(1,1)])
+
+x1 = h3cells(line, 6)
+x2 = h3cells(line, 6; shortest_path=false)
+
+fig = Figure()
+ax1 = Axis(fig[1,1])
+ax2 = Axis(fig[1, 2])
+
+poly!(ax1, x1)
+lines!(ax1, GI.coordinates(line))
+poly!(ax2, x2)
+lines!(ax2, GI.coordinates(line))
+
+fig
+```
+
+### (Multi)Polygon
+
+- Containment modes for polygons:
+  - `:center`: Include cell if its center is inside the polygon.
+  - `:full`: Include cell if all vertices are inside the polygon.
+  - `:overlap`: Include cell if any part intersects the polygon.
+  - `:overlap_bbox`: Include cell if any part of the bounding box intersects the polygon.
+
+```{julia}
+using OSMGeocoder
+
+obj = geocode(state="North Carolina")
+
+# Create figure
+function make_axis(i, j, res, containment)
+    ax = Axis(fig[i, j], title="containment = $containment")
+    x = h3cells(obj.geometry[1], res; containment)
+    lines!(ax, x)
+    lines!(ax, obj.geometry)
+end
+fig = Figure()
+make_axis(1, 1, 4, :center)
+make_axis(1, 2, 4, :full)
+make_axis(2, 1, 4, :overlap)
+make_axis(2, 2, 4, :overlap_bbox)
+fig
+```
+
+### Extents
+
+
+
+```{julia}
+ex = GI.extent(obj)
+
+# for plotting
+x1, x2 = ex.X
+y1, y2 = ex.Y
+linestring = GI.LineString([(x1,y1), (x1,y2), (x2,y2), (x2, y1), (x1,y1)])
+
+# Create figure
+function make_axis(i, j, res, containment)
+    ax = Axis(fig[i, j], title="containment = $containment")
+    x = h3cells(ex, res; containment)
+    lines!(ax, linestring)
+    lines!(ax, x)
+end
+fig = Figure()
+make_axis(1, 1, 4, :center)
+make_axis(1, 2, 4, :full)
+make_axis(2, 1, 4, :overlap)
+make_axis(2, 2, 4, :overlap_bbox)
+fig
+```
