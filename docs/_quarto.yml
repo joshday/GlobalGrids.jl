@@ -1,24 +1,29 @@
 project:
-  type: book
-
+  type: website
+  render:
+    - "*.qmd"
 engines: ['julia']
-
-book:
+website:
   title: "GlobalGrids.jl"
-  # author: "Josh Day and contributors"
-  chapters:
-    - index.qmd
-    - h3.qmd
-    - coordinates.qmd
-    - icosahedron.qmd
-    # - api.qmd
-
-# bibliography: references.bib
+  page-navigation: true
+  navbar:
+    background: dark
+    search: true
+    left:
+      - href: index.qmd
+        text: Home
+    right:
+      - icon: github
+        href: https://github.com/joshday/GlobalGrids.jl
+        aria-label: GitHub
+  sidebar:
+    contents:
+      - index.qmd
+      - h3.qmd
+      - coordinates.qmd
+      - icosahedron.qmd
 
 format:
   html:
-    theme:
-      - cosmo
-      - brand
-  pdf:
-    documentclass: scrreprt
+    theme: cosmo
+    toc: true

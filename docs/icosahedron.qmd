@@ -1,5 +1,9 @@
 # Icosahedron utilities
 
+```{julia}
+
+```
+
 The package includes helper utilities for working with an icosahedron and its dual, useful for designing and visualizing discrete global grids.
 
 ## Building an icosahedron

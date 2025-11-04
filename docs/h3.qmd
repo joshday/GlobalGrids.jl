@@ -2,7 +2,7 @@
 
 ```{julia}
 #| echo: false
-using GlobalGrids, GeoMakie, GLMakie
+using GlobalGrids, GeoMakie, CairoMakie
 
 grid = H3Grid()
 

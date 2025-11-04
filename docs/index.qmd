@@ -10,9 +10,11 @@ GlobalGrids provides:
 - Icosahedron mesh and orientation utilities for DGG design (a work in progress).
 - Makie plotting support.
 
+> A great resource for learning about DGGs is [https://discreteglobalgrids.org](https://discreteglobalgrids.org)
+
 ## Installation
 
-```
+```julia
 using Pkg
 Pkg.add(url = "https://github.com/joshday/GlobalGrids.jl")
 ```
@@ -21,7 +23,7 @@ Pkg.add(url = "https://github.com/joshday/GlobalGrids.jl")
 
 ```{julia}
 import GlobalGrids as GG
-using GLMakie
+using CairoMakie
 
 # Create a lon/lat point and convert to an H3 cell at resolution 7
 p = GG.LonLat(-75.0, 54.0)
