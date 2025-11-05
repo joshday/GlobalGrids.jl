@@ -16,7 +16,7 @@ using H3_jll: libh3
 
 export icosahedron, LonLat, cells,
     # H3:
-    H3Grid, H3Cell, h3cells
+    H3Grid, H3Cell, h3cells, h3join
 
 
 #-----------------------------------------------------------------------------# icosahedron
@@ -96,6 +96,22 @@ GI.ngeom(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = 1
 GI.getgeom(::GI.PolygonTrait, o::T, i::Integer) where {T <: AbstractCell} = GI.LineString(GI.coordinates(o))
 
 include("h3.jl")
+
+#-----------------------------------------------------------------------------# plotting utils
+function crosses_meridian(geom, λ0 = 180.0)
+    lons = Float64[x[1] for x in GI.coordinates(geom)]
+    rotated = mod.(lons .- λ0, 360)  # rotate such that λ0 is the discontinuity
+    return maximum(rotated) - minimum(rotated) > 180
+end
+
+
+
+
+
+
+
+
+
 
 # #-----------------------------------------------------------------------------# centroid
 # centroid(x) = GI.centroid(x)

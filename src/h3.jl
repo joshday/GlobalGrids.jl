@@ -157,7 +157,7 @@ h3_digits(o::H3Cell) = h3_digits(o.index)
     (x & mask) | (UInt64(d) << shift)
 end
 
-decode(o::H3Cell) = (base_cell = h3_base_cell(o), digits = h3_digits(o))
+decode(o::H3Cell) = string(h3_base_cell(o), "-", join(h3_digits(o)))
 
 #-----------------------------------------------------------------------------# inspection
 function parent(o::H3Cell)
@@ -301,4 +301,35 @@ h3cells(::Nothing, x::AbstractArray{<: LonLat}, res::Integer) = h3cells(GI.Multi
 
 h3cells(::Nothing, x::AbstractArray{<: NTuple{2, Real}}, res::Integer) = h3cells(LonLat.(x), res)
 
-#-----------------------------------------------------------------------------# datacells
+
+# Rasters: h3cells((r, r.dims))
+function h3cells(::Nothing, (z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
+    S = dropmissing ? Base.nonmissingtype(T) : T
+    out = Dict{H3Cell, Vector{S}}()
+
+    for ((x, y), z) in zip(Iterators.product(x, y), z)
+        if !ismissing(z) || !dropmissing
+            cell = H3Cell(LonLat(x, y), res)
+            data = get!(out, cell, S[])
+            push!(data, z)
+        end
+    end
+    return out
+end
+
+#-----------------------------------------------------------------------------# h3join
+Base.join(::Type{H3Cell}, args...; kw...) = h3join(args...; kw...)
+
+function h3join((z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
+    S = dropmissing ? Base.nonmissingtype(T) : T
+    out = Dict{H3Cell, Vector{S}}()
+    for ((x, y), z) in zip(Iterators.product(x, y), z)
+        if !ismissing(z) || !dropmissing
+            cell = H3Cell(LonLat(x, y), res)
+            data = get!(out, cell, S[])
+            push!(data, z)
+        end
+    end
+    return out
+end
+

@@ -243,29 +243,52 @@ fig
 
 ## "Rasterizing" Rasters
 
-
+- For data that is associated with a location, i.e. rasters, use `h3join(data, resolution)` to create a `Dict{H3Cell, Vector{T}}` where `T` is the eltype of the data.
+- Note that plotting polygons across a left/right boundary on a given projection can have strange behavior.  See [https://en.wikipedia.org/wiki/180th_meridian#Software_representation_problems](https://en.wikipedia.org/wiki/180th_meridian#Software_representation_problems).
 
 ```{julia}
-using GlobalGrids, Rasters, RasterDataSources, ArchGDAL
-
-ENV["RASTERDATASOURCES_PATH"] = tempdir()
-
-r = Raster(getraster(WorldClim{Elevation}).elev)
-
-coords = [LonLat(lon,lat) for lon in r.dims[1], lat in r.dims[2]]
+#| echo: false
+import Scratch
+ENV["RASTERDATASOURCES_PATH"] = Scratch.get_scratch!("RASTERDATASOURCES_PATH")
+nothing
 ```
-<!-- - For rasters, `cells` returns `Dict{Cell, Vector{T}}` where `T` is the eltype of the raster.
+
 
 ```{julia}
 using GlobalGrids, Rasters, RasterDataSources, ArchGDAL
 
-ENV["RASTERDATASOURCES_PATH"] = tempdir()
-
 r = Raster(getraster(WorldClim{Elevation}).elev)
 
-dict = h3cells(r, 2)
+dict = h3join(r, 2)
+
 cells = collect(keys(dict))
 vals = maximum.(values(dict))
 
-poly(cells, color=vals, axis=(;type = GeoAxis, dest = "+proj=ortho +lon_0=-50 +lat_0=30"))
-``` -->
+# Do some work to avoid polygon issues on boundaries:
+idx = findall(x -> !GlobalGrids.crosses_meridian(x, 180), cells)
+
+cells2 = cells[idx]
+vals2 = vals[idx]
+
+fig = Figure()
+ax1 = Axis(fig[1, 1], title="Without Polygon Filtering")
+ax2 = Axis(fig[2, 1], title="With Polygon Filtering")
+
+poly!(ax1, cells, color=vals)
+poly!(ax2, cells2, color=vals2)
+fig
+```
+
+:::{.callout-note}
+When plotting large numbers of cells, its more efficient to just plot the centroid of the cell:
+:::
+
+```{julia}
+dict = h3join(r, 4)
+
+cells = collect(keys(dict))
+
+vals = maximum.(values(dict))
+
+scatter(GI.centroid.(cells), color=vals, markersize=2)
+```
