@@ -14,13 +14,86 @@ using LinearAlgebra
 using Rotations
 using H3_jll: libh3
 
-export icosahedron, LonLat, LonLatAuthalic, ISEA, ISEACube, ECEF,
+export icosahedron, LonLat, cells,
+    # H3:
     H3Grid, H3Cell, h3cells
 
-include("icosahedron.jl")
-include("coordinates.jl")
 
-include("LibH3.jl")
+#-----------------------------------------------------------------------------# icosahedron
+include("icosahedron.jl")
+
+#-----------------------------------------------------------------------------# LonLat
+struct LonLat{T}
+    lon::T
+    lat::T
+end
+Base.show(io::IO, o::LonLat{T}) where {T} = print(io, styled"{bright_cyan:LonLat\{$T\}} (", o.lon, ", ", o.lat, ")")
+
+Base.getindex(o::LonLat, i::Integer) = i == 1 ? o.lon : i == 2 ? o.lat : throw(BoundsError(o, i))
+Base.length(o::LonLat) = 2
+Base.iterate(o::LonLat, i = 1) = i > 2 ? nothing : (o[i], i + 1)
+Base.eltype(::LonLat{T}) where {T} = T
+
+GI.isgeometry(::LonLat) = true
+GI.geomtrait(o::LonLat) = GI.PointTrait()
+GI.ncoord(::GI.PointTrait, o::LonLat) = 2
+GI.getcoord(::GI.PointTrait, o::LonLat, i::Int) = o[i]
+GI.coordinates(::GI.PointTrait, o::LonLat) = o
+
+"Authalic radius of the earth in meters (WGS84)"
+const R = 6_371_007.180918475
+
+function haversine((a_lon, a_lat)::LonLat, (b_lon, b_lat)::LonLat)
+    x = sind((b_lat - a_lat) / 2) ^ 2 + cosd(a_lat) * cosd(b_lat) * sind((b_lon - a_lon) / 2) ^ 2
+    return 2R * asin(min(sqrt(x), one(x)))
+end
+
+function destination((lon, lat)::LonLat, azimuth°::Real, m::Real)
+    δ = rad2deg(m / R)
+    lat2 = asind(sind(lat) * cosd(δ) + cosd(lat) * sind(δ) * cosd(azimuth°))
+    lon2 = lon + atand(sind(azimuth°) * sind(δ) * cosd(lat), cosd(δ) - sind(lat) * sind(lat2))
+    LonLat(lon2, lat2)
+end
+
+#-----------------------------------------------------------------------------# AbstractGrid
+abstract type AbstractGrid end
+Base.show(io::IO, ::T) where {T <: AbstractGrid} = print(io, styled"{bright_cyan: ⣿⣿ $(T.name.name)}")
+
+GI.isgeometry(::AbstractGrid) = true
+GI.geomtrait(o::AbstractGrid) = GI.PolyhedralSurfaceTrait()
+
+# Interface:
+# GI.crs
+# GI.ncoord
+# GI.npolygon
+# Iterates over Cell{GridType, IndexType}
+
+#-----------------------------------------------------------------------------# AbstractCell
+abstract type AbstractCell end
+
+# Interface for AbstractCell:
+# grid(::Cell)::GridType
+# icon(::Cell)
+# decode(::Cell)
+# resolution(::Cell)
+# Base.getindex(::GridType, ::Integer)::Cell{GridType, IndexType}
+# GI.coordinates(::Cell)
+is_pentagon(::AbstractCell) = false
+
+function Base.show(io::IO, o::T) where {T <: AbstractCell}
+    print(io, styled"{bright_green: $(icon(o))}")
+    print(io, styled" {bright_cyan:$(T.name.name)} {bright_yellow:$(resolution(o))}")
+    print(io, styled"{bright_black: $(decode(o))}")
+end
+
+GI.isgeometry(::T) where {T <: AbstractCell} = true
+GI.crs(o::T) where {T <: AbstractCell} = GI.crs(grid(o))
+GI.ncoord(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = GI.ncoord(grid(o))
+GI.geomtrait(o::T) where {T <: AbstractCell} = GI.PolygonTrait()
+GI.nhole(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = 0
+GI.ngeom(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = 1
+GI.getgeom(::GI.PolygonTrait, o::T, i::Integer) where {T <: AbstractCell} = GI.LineString(GI.coordinates(o))
+
 include("h3.jl")
 
 # #-----------------------------------------------------------------------------# centroid

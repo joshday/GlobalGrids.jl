@@ -4,6 +4,11 @@ code-fold: true
 # H3 Grid System
 
 ```{julia}
+#| echo: false
+using Revise
+```
+
+```{julia}
 using GlobalGrids, GeoMakie, CairoMakie
 
 grid = H3Grid()
@@ -11,7 +16,7 @@ grid = H3Grid()
 fig = Figure()
 ax = GeoAxis(fig[1,1], dest = "+proj=ortho +lon_0=-50 +lat_0=30")
 lines!(ax, [grid[i] for i in 1:121])
-poly!(ax, GlobalGrids.pentagons(grid, 0), color=(:black, .4))
+poly!(ax, collect(GlobalGrids.pentagons(grid, 0)), color=(:black, .4))
 
 ep = surface!(ax,
     -180..180, -90..90,
@@ -72,9 +77,9 @@ H3Cell(coords, 10)
 
 ```{julia}
 #| code-fold: false
-c = H3Cell(ECEF(972438.8178049477, -3.62919107530028e6, 5.136743831429061e6))
+c = H3Cell(coords)
 
-str = GlobalGrids.h3string(c)
+str = GlobalGrids.h3_string(c)
 @info str
 
 H3Cell(str)
@@ -84,10 +89,10 @@ H3Cell(str)
 
 ```{julia}
 @show GlobalGrids.resolution(c)
-@show GlobalGrids.base_cell(c)
+@show GlobalGrids.h3_base_cell(c)
 @show GlobalGrids.is_pentagon(c)
-@show GlobalGrids.digits(c)
-@show GlobalGrids.face_numbers(c)
+@show GlobalGrids.h3_digits(c)
+@show GlobalGrids.h3_face_numbers(c)
 nothing
 ```
 
@@ -143,7 +148,7 @@ fig
 ll = LonLat(-54.0, -12.0)
 
 fig = Figure()
-ax = Axis(fig[1,1], title="Resolutions 0-3")
+ax = Axis(fig[1,1], title="Cells Containing Point at Resolutions 0-3")
 for res in 0:3
     lines!(ax, h3cells(ll, res))
 end
@@ -160,29 +165,26 @@ coords = [LonLat(360rand() - 180, 180rand() - 90) for _ in 1:100]
 x = H3Cell.(coords, 0)
 
 f, a, p = lines(x, axis=(;type=GeoAxis, dest = "+proj=ortho +lon_0=-50 +lat_0=30"))
-scatter!(a, coords)
+scatter!(a, coords, color=:black)
 f
 ```
 
 ### Line
 
-- By default, the cells will be an arbitrary shortest path between the cells that contain the two points.
-- For more accuracy (cells with any intersection are included), but slower performance, use the `shortest_path=false` keyword argument.
+- By default, the cells will be an arbitrary shortest path between the cells that contain the two points (`containment = :shortest_path`).
+- The other containment options for line(string)s are `:overlap` and `:overlap_bbox`.
 
 ```{julia}
 line = GI.Line([LonLat(0, 0), LonLat(1,1)])
 
-x1 = h3cells(line, 6)
-x2 = h3cells(line, 6; shortest_path=false)
+fig = Figure(size=(1000, 300))
 
-fig = Figure()
-ax1 = Axis(fig[1,1])
-ax2 = Axis(fig[1, 2])
-
-poly!(ax1, x1)
-lines!(ax1, GI.coordinates(line))
-poly!(ax2, x2)
-lines!(ax2, GI.coordinates(line))
+for (i, containment) in enumerate((:shortest_path, :overlap, :overlap_bbox))
+    ax = Axis(fig[1, i], aspect=DataAspect(), title="containment = :$containment")
+    x = h3cells(line, 6; containment)
+    lines!(ax, x)
+    lines!(ax, GI.coordinates(line), linewidth=3, color = :black)
+end
 
 fig
 ```
@@ -201,17 +203,17 @@ using OSMGeocoder
 obj = geocode(state="North Carolina")
 
 # Create figure
-function make_axis(i, j, res, containment)
-    ax = Axis(fig[i, j], title="containment = $containment")
-    x = h3cells(obj.geometry[1], res; containment)
+function make_axis(i, j, containment)
+    ax = Axis(fig[i, j], title="containment = :$containment")
+    x = h3cells(obj.geometry[1], 4; containment)
     lines!(ax, x)
     lines!(ax, obj.geometry)
 end
 fig = Figure()
-make_axis(1, 1, 4, :center)
-make_axis(1, 2, 4, :full)
-make_axis(2, 1, 4, :overlap)
-make_axis(2, 2, 4, :overlap_bbox)
+make_axis(1, 1, :center)
+make_axis(1, 2, :full)
+make_axis(2, 1, :overlap)
+make_axis(2, 2, :overlap_bbox)
 fig
 ```
 
@@ -230,16 +232,34 @@ y1, y2 = ex.Y
 linestring = GI.LineString([(x1,y1), (x1,y2), (x2,y2), (x2, y1), (x1,y1)])
 
 # Create figure
-function make_axis(i, j, res, containment)
-    ax = Axis(fig[i, j], title="containment = $containment")
-    x = h3cells(ex, res; containment)
+function make_axis(i, j, containment)
+    ax = Axis(fig[i, j], title="containment = :$containment")
+    x = h3cells(ex, 4; containment)
     lines!(ax, linestring)
     lines!(ax, x)
 end
 fig = Figure()
-make_axis(1, 1, 4, :center)
-make_axis(1, 2, 4, :full)
-make_axis(2, 1, 4, :overlap)
-make_axis(2, 2, 4, :overlap_bbox)
+make_axis(1, 1, :center)
+make_axis(1, 2, :full)
+make_axis(2, 1, :overlap)
+make_axis(2, 2, :overlap_bbox)
 fig
+```
+
+## "Rasterizing" Rasters
+
+- For rasters, `cells` returns `Dict{Cell, Vector{T}}` where `T` is the eltype of the raster.
+
+```{julia}
+using GlobalGrids, Rasters, RasterDataSources, ArchGDAL
+
+ENV["RASTERDATASOURCES_PATH"] = tempdir()
+
+r = Raster(getraster(WorldClim{Elevation}).elev)
+
+dict = h3cells(r, 2)
+cells = collect(keys(dict))
+vals = maximum.(values(dict))
+
+poly(cells, color=vals, axis=(;type = GeoAxis, dest = "+proj=ortho +lon_0=-50 +lat_0=30"))
 ```

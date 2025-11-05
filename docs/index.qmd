@@ -1,14 +1,12 @@
-# GlobalGrids.jl
+# Intro to GlobalGrids.jl
 
 **Discrete global grids (DGGs) for Julia.**
 
 GlobalGrids provides:
 
 - An idiomatic Julia interface to Uber's [H3](https://h3geo.org) hexagonal grid system.
-- Lightweight types for coordinates (wrappers of a `GeometryBasics.Point`) and projections: `LonLat`, `LonLatAuthalic`, `ISEA`, `ISEACube`, `ECEF`
-- High‑level operations on coordinates: `haversine`, `destination`, `azimuth`, `coords2extent`
 - Icosahedron mesh and orientation utilities for DGG design (a work in progress).
-- Makie plotting support.
+- Makie.jl and Rasters.jl integration.
 
 > A great resource for learning about DGGs is [https://discreteglobalgrids.org](https://discreteglobalgrids.org)
 
@@ -25,23 +23,13 @@ Pkg.add(url = "https://github.com/joshday/GlobalGrids.jl")
 import GlobalGrids as GG
 using CairoMakie
 
-# Create a lon/lat point and convert to an H3 cell at resolution 7
+# Create a lon/lat point
 p = GG.LonLat(-75.0, 54.0)
 
+# Find the cell containing the point at a given resolution
 c = GG.H3Cell(p, 7)
 ```
 
 ```{julia}
-neighbors = GG.grid_ring(c, 1)
+poly(GG.grid_ring(c, 1), color=1:6)
 ```
-
-```{julia}
-poly(neighbors, color=1:6)
-```
-
-## Conventions
-
-In GlobalGrids:
-
-- Angles are in degrees.
-- Distances are in meters (area in meters ^ 2, etc.).

@@ -1,13 +1,15 @@
 project:
-  type: website
-  render:
-    - "*.qmd"
+  type: book
+  # render:
+  #   - "*.qmd"
 
 engines: ['julia']
 
-website:
+book:
   title: "GlobalGrids.jl"
   page-navigation: true
+  search:
+    location: sidebar
   navbar:
     # left:
       # - href: index.qmd
@@ -16,15 +18,18 @@ website:
       - icon: github
         href: https://github.com/joshday/GlobalGrids.jl
         aria-label: GitHub
-  sidebar:
-    style: docked
-    search: true
-    contents:
-      - text: "Intro"
-        file: index.qmd
-      - h3.qmd
-      - coordinates.qmd
-      - icosahedron.qmd
+  # sidebar:
+  #   style: docked
+  #   contents:
+  #     - index.qmd
+      # - text: "Intro"
+      #   file: index.qmd
+      # - h3.qmd
+      # - coordinates.qmd
+      # - icosahedron.qmd
+  chapters:
+    - index.qmd
+    - h3.qmd
 
 format:
   html:
@@ -37,4 +42,4 @@ format:
     css: styles.css
 
 execute:
-  cache: true
+  cache: false

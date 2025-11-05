@@ -19,9 +19,11 @@ StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 
 [weakdeps]
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+Rasters = "a3a2b9e3-a471-40c9-b274-f788e487c689"
 
 [extensions]
-GlobalGridsMakieExt = ["Makie", "GeoInterface"]
+GlobalGridsMakieExt = ["Makie"]
+GlobalGridsRastersExt = ["Rasters"]
 
 [compat]
 Extents = "0.1.6"
