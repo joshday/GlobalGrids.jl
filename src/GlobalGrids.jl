@@ -14,9 +14,9 @@ using LinearAlgebra
 using Rotations
 using H3_jll: libh3
 
-export icosahedron, LonLat, cells,
+export icosahedron, LonLat, cells, CellTable,
     # H3:
-    H3Grid, H3Cell, h3cells, h3join
+    H3Grid, H3Cell, h3cells, h3bin
 
 
 #-----------------------------------------------------------------------------# icosahedron
@@ -73,6 +73,7 @@ GI.geomtrait(o::AbstractGrid) = GI.PolyhedralSurfaceTrait()
 abstract type AbstractCell end
 
 # Interface for AbstractCell:
+# CellType(::LonLat, ::Integer)
 # grid(::Cell)::GridType
 # icon(::Cell)
 # decode(::Cell)
@@ -95,6 +96,55 @@ GI.nhole(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = 0
 GI.ngeom(::GI.PolygonTrait, o::T) where {T <: AbstractCell} = 1
 GI.getgeom(::GI.PolygonTrait, o::T, i::Integer) where {T <: AbstractCell} = GI.LineString(GI.coordinates(o))
 
+# Is this faster than GO default?
+# # GeometryOps optimizations for containment of point in cell
+# GO._within(::GI.PointTrait, xy::LonLat, ::GI.PolygonTrait, o::T) where {T <: AbstractCell} = T(xy) == o
+# GO._within(::GI.PointTrait, xy, ::GI.PolygonTrait, o::T) where {T <: AbstractCell} = T(LonLat(xy...)) == o
+
+
+#-----------------------------------------------------------------------------# cells
+# New methods implement: cells(::Type{T}, trait, geom, res; kw...)
+
+cells(::Type{T}, geom, res; kw...) where {T <: AbstractCell} = cells(T, GI.geomtrait(geom), geom, res; kw...)
+
+cells(::Type{T}, ::GI.PointTrait, geom, res) where {T <: AbstractCell} = [T(LonLat(GI.coordinates(geom)...), res)]
+
+function cells(::Type{T}, ::GI.MultiPointTrait, geom, res) where {T <: AbstractCell}
+    unique(T(LonLat(x...), res) for x in GI.coordinates(geom))
+end
+
+# !!! No fallbacks for: LineTrait, PolygonTrait
+
+function cells(::Type{T}, ::GI.LineStringTrait, geom, res::Integer; containment = :shortest_path) where {T <: AbstractCell}
+    out = T[]
+    coords = [LonLat(x...) for x in GI.coordinates(geom)]
+    @views for (a,b) in zip(coords[1:end-1], coords[2:end])
+        line = GI.Line([a, b])
+        union!(out, cells(T, line, res; containment))
+    end
+    return out
+end
+
+function cells(::Type{T}, ::GI.MultiPolygonTrait, geom, res::Integer; kw...) where {T <: AbstractCell}
+    mapreduce(x -> cells(T, x, res; kw...), union, GI.getpolygon(geom))
+end
+
+#-----------------------------------------------------------------------------# Things without geomtraits
+function cells(::Type{CT}, ::Nothing, (z, (x, y))::Tuple{Z, XY}, res::Integer; dropmissing=true) where {CT <: AbstractCell, T, Z<:AbstractMatrix{T}, XY<:Tuple}
+    S = dropmissing ? Base.nonmissingtype(T) : T
+    out = Dict{CT, Vector{S}}()
+    for ((x, y), z) in zip(Iterators.product(x, y), z)
+        if !ismissing(z) || !dropmissing
+            cell = CT(LonLat(x, y), res)
+            data = get!(out, cell, S[])
+            push!(data, z)
+        end
+    end
+    return out
+end
+
+
+#-----------------------------------------------------------------------------# h3
 include("h3.jl")
 
 #-----------------------------------------------------------------------------# plotting utils

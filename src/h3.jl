@@ -235,18 +235,9 @@ haversine(a::H3Cell, b::H3Cell) = haversine(GI.centroid(a), GI.centroid(b))
 destination(a::H3Cell, azimuth°, m) = H3Cell(destination(GI.centroid(a), azimuth°, m), resolution(a))
 
 #-----------------------------------------------------------------------------# h3cells
-cells(::Type{H3Cell}, args...; kw...) = h3cells(args...; kw...)
+h3cells(args...; kw...) = cells(H3Cell, args...; kw...)
 
-h3cells(geom, res::Integer = 10; kw...) = h3cells(GI.geomtrait(geom), geom, res; kw...)
-
-h3cells(::GI.PointTrait, geom, res::Integer) = [H3Cell(LonLat(GI.coordinates(geom)...), res)]
-
-function h3cells(::GI.MultiPointTrait, geom, res::Integer)
-    coords = [LonLat(x...) for x in GI.coordinates(geom)]
-    unique!(H3Cell.(coords, res))
-end
-
-function h3cells(::GI.LineTrait, geom, res::Integer; containment = :shortest_path)
+function cells(::Type{H3Cell}, ::GI.LineTrait, geom, res::Integer; containment = :shortest_path)
     containment in (:shortest_path, :overlap, :overlap_bbox) ||
         throw(ArgumentError("Invalid containment mode.  Expected one of `(:shortest_path, :overlap, :overlap_bbox)`.  Found: $containment."))
     coords = [LonLat(x...) for x in GI.coordinates(geom)]
@@ -257,17 +248,7 @@ function h3cells(::GI.LineTrait, geom, res::Integer; containment = :shortest_pat
     h3cells(GI.Polygon(coords), res; containment)
 end
 
-function h3cells(::GI.LineStringTrait, geom, res::Integer; containment = :shortest_path)
-    out = H3Cell[]
-    coords = [LonLat(x...) for x in GI.coordinates(geom)]
-    @views for (a,b) in zip(coords[1:end-1], coords[2:end])
-        line = GI.Line([a, b])
-        union!(out, h3cells(line, res; containment))
-    end
-    return out
-end
-
-function h3cells(::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
+function cells(::Type{H3Cell}, ::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
     containment in (:center, :full, :overlap, :overlap_bbox) ||
         throw(ArgumentError("Invalid containment mode.  Expected one of `(:center, :full, :overlap, :overlap_bbox)`.  Found: $containment."))
     verts = map(GI.coordinates(geom)) do ring
@@ -287,49 +268,52 @@ function h3cells(::GI.PolygonTrait, geom, res::Integer; containment = :overlap)
     return H3Cell.(filter!(!iszero, unique!(out)))
 end
 
-function h3cells(::GI.MultiPolygonTrait, geom, res::Integer; kw...)
-    mapreduce(x -> h3cells(x, res; kw...), union, GI.getpolygon(geom))
-end
+# function h3cells(::GI.MultiPolygonTrait, geom, res::Integer; kw...)
+#     mapreduce(x -> h3cells(x, res; kw...), union, GI.getpolygon(geom))
+# end
 
-# -----------------------------------------------------------------------------# h3cells for no geomtrait
-function h3cells(::Nothing, (; X, Y)::Extents.Extent, res::Integer; kw...)
-    ls = GI.LineString([(X[1], Y[1]), (X[1], Y[2]), (X[2], Y[2]), (X[2], Y[1]), (X[1], Y[1])])
-    h3cells(GI.Polygon([ls]), res; kw...)
-end
+# # -----------------------------------------------------------------------------# h3cells for no geomtrait
+# function h3cells(::Nothing, (; X, Y)::Extents.Extent, res::Integer; kw...)
+#     ls = GI.LineString([(X[1], Y[1]), (X[1], Y[2]), (X[2], Y[2]), (X[2], Y[1]), (X[1], Y[1])])
+#     h3cells(GI.Polygon([ls]), res; kw...)
+# end
 
-h3cells(::Nothing, x::AbstractArray{<: LonLat}, res::Integer) = h3cells(GI.MultiPoint(x), res)
+# h3cells(::Nothing, x::AbstractArray{<: LonLat}, res::Integer) = h3cells(GI.MultiPoint(x), res)
 
-h3cells(::Nothing, x::AbstractArray{<: NTuple{2, Real}}, res::Integer) = h3cells(LonLat.(x), res)
+# h3cells(::Nothing, x::AbstractArray{<: NTuple{2, Real}}, res::Integer) = h3cells(LonLat.(x), res)
 
 
-# Rasters: h3cells((r, r.dims))
-function h3cells(::Nothing, (z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
-    S = dropmissing ? Base.nonmissingtype(T) : T
-    out = Dict{H3Cell, Vector{S}}()
+# # Rasters: h3cells((r, r.dims))
+# function h3cells(::Nothing, (z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
+#     S = dropmissing ? Base.nonmissingtype(T) : T
+#     out = Dict{H3Cell, Vector{S}}()
 
-    for ((x, y), z) in zip(Iterators.product(x, y), z)
-        if !ismissing(z) || !dropmissing
-            cell = H3Cell(LonLat(x, y), res)
-            data = get!(out, cell, S[])
-            push!(data, z)
-        end
-    end
-    return out
-end
+#     for ((x, y), z) in zip(Iterators.product(x, y), z)
+#         if !ismissing(z) || !dropmissing
+#             cell = H3Cell(LonLat(x, y), res)
+#             data = get!(out, cell, S[])
+#             push!(data, z)
+#         end
+#     end
+#     return out
+# end
 
-#-----------------------------------------------------------------------------# h3join
-Base.join(::Type{H3Cell}, args...; kw...) = h3join(args...; kw...)
+# #-----------------------------------------------------------------------------# h3bin
+# spatial_bin(::Type{H3Cell}, args...; kw...) = h3bin(args...; kw...)
 
-function h3join((z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
-    S = dropmissing ? Base.nonmissingtype(T) : T
-    out = Dict{H3Cell, Vector{S}}()
-    for ((x, y), z) in zip(Iterators.product(x, y), z)
-        if !ismissing(z) || !dropmissing
-            cell = H3Cell(LonLat(x, y), res)
-            data = get!(out, cell, S[])
-            push!(data, z)
-        end
-    end
-    return out
-end
+# function h3bin((z, (x, y))::Tuple{AbstractMatrix{T}, Tuple}, res::Integer; dropmissing=true) where {T}
+#     S = dropmissing ? Base.nonmissingtype(T) : T
+#     out = Dict{H3Cell, Vector{S}}()
+#     for ((x, y), z) in zip(Iterators.product(x, y), z)
+#         if !ismissing(z) || !dropmissing
+#             cell = H3Cell(LonLat(x, y), res)
+#             data = get!(out, cell, S[])
+#             push!(data, z)
+#         end
+#     end
+#     return out
+# end
 
+# function h3bin(cells::AbstractVector{H3Cell}, f::Base.Callable; kw...)
+#     cells = h3cells(geom, res; kw...)
+# end

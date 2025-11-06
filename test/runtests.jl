@@ -96,9 +96,14 @@ end
     x = h3cells(GI.Line(boundary[1:2]), 5; containment = :shortest_path)
     x = h3cells(GI.Line(boundary[1:2]), 5; containment = :overlap)
 
-    # TODO: test other containment
+    # Linestring
+    x = h3cells(GI.LineString(boundary), 5; containment = :shortest_path)
 
-    # LineString
+    # Polygon
+    x = h3cells(polygon, 5; containment = :center)
+
+    # Multipolygon
+    x = h3cells(multipolygon, 5; containment = :overlap)
 
 end
 

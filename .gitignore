@@ -3,4 +3,5 @@ docs/_book
 *.html
 docs/site_libs
 docs/index_files
+docs/h3_files
 *.cache
